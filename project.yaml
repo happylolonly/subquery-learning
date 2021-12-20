@@ -14,8 +14,13 @@ dataSources:
     mapping:
       file: ./dist/index.js
       handlers:
-        - handler: handleEvent
+        - handler: handleCouncilProposedEvent
           kind: substrate/EventHandler
           filter:
-            module: balances
-            method: Deposit
+            module: council
+            method: Proposed
+        - handler: handleCouncilVotedEvent
+          kind: substrate/EventHandler
+          filter:
+            module: council
+            method: Voted

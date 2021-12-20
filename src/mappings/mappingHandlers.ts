@@ -1,34 +1,55 @@
 import { SubstrateEvent } from "@subql/types";
-import { Account } from "../types";
-import { Balance } from "@polkadot/types/interfaces";
+import { bool, Int } from "@polkadot/types";
+import { Proposal, VoteHistory, Councillor } from "../types/models";
 
-// export async function handleBlock(block: SubstrateBlock): Promise<void> {
-//     //Create a new starterEntity with ID using block hash
-//     let record = new StarterEntity(block.block.header.hash.toString());
-//     //Record block number
-//     record.field1 = block.block.header.number.toNumber();
-//     await record.save();
-// }
-
-export async function handleEvent(event: SubstrateEvent): Promise<void> {
+export async function handleCouncilProposedEvent(
+  event: SubstrateEvent
+): Promise<void> {
   const {
     event: {
-      data: [account, balance],
+      data: [accountId, proposal_index, proposal_hash, threshold],
+    },
+  } = event;
+  const proposal = new Proposal(proposal_hash.toString());
+  proposal.index = proposal_index.toString();
+  proposal.account = accountId.toString();
+  proposal.hash = proposal_hash.toString();
+  proposal.voteThreshold = threshold.toString();
+  proposal.block = event.block.block.header.number.toBigInt();
+  await proposal.save();
+}
+
+export async function handleCouncilVotedEvent(
+  event: SubstrateEvent
+): Promise<void> {
+  const {
+    event: {
+      data: [councilorId, proposal_hash, approved_vote, numberYes, numberNo],
     },
   } = event;
 
-  let record = new Account(event.extrinsic.block.block.header.hash.toString());
-  record.account = account.toString();
-  record.balance = (balance as Balance).toBigInt();
-
-  await record.save();
+  await ensureCouncillor(councilorId.toString());
+  // Retrieve the record by the accountID
+  const voteHistory = new VoteHistory(
+    `${event.block.block.header.number.toNumber()}-${event.idx}`
+  );
+  voteHistory.proposalHashId = proposal_hash.toString();
+  voteHistory.approvedVote = (approved_vote as bool).valueOf();
+  voteHistory.councillorId = councilorId.toString();
+  voteHistory.votedYes = (numberYes as Int).toNumber();
+  voteHistory.votedNo = (numberNo as Int).toNumber();
+  voteHistory.block = event.block.block.header.number.toNumber();
+  // logger.info(JSON.stringify(voteHistory));
+  await voteHistory.save();
 }
 
-// export async function handleCall(extrinsic: SubstrateExtrinsic): Promise<void> {
-//     const record = await StarterEntity.get(extrinsic.block.block.header.hash.toString());
-//     //Date type timestamp
-//     record.field4 = extrinsic.block.timestamp;
-//     //Boolean tyep
-//     record.field5 = true;
-//     await record.save();
-// }
+async function ensureCouncillor(accountId: string): Promise<void> {
+  // ensure that our account entities exist
+  let councillor = await Councillor.get(accountId);
+  if (!councillor) {
+    councillor = new Councillor(accountId);
+    councillor.numberOfVotes = 0;
+  }
+  councillor.numberOfVotes += 1;
+  await councillor.save();
+}
